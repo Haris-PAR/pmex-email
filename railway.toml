@@ -1,0 +1,14 @@
+[build]
+builder = "NIXPACKS"
+
+[deploy]
+startCommand = "python main.py"
+# Default schedule: international close is 11:00 PM PKT (UTC+5) = 18:00 UTC.
+# Railway cron runs in UTC and this repo is deployed as TWO services:
+#   service "pmex-intl"  -> SECTOR=international, cronSchedule "5 18 * * 1-5"  (23:05 PKT)
+#   service "pmex-local" -> SECTOR=local,         cronSchedule "35 18 * * 1-5" (23:35 PKT, after 11:30 PM PKT close)
+# Set SECTOR and cronSchedule per-service in the Railway dashboard; this file's
+# cronSchedule is only the default if a service doesn't override it.
+cronSchedule = "5 18 * * 1-5"
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3
