@@ -1,43 +1,35 @@
-"""SMTP email delivery."""
+"""Webhook email delivery via Google Apps Script (Railway Safe)."""
 
-import smtplib
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-
+import requests
 from config import (
-    EMAIL_FROM,
     EMAIL_TO,
-    SMTP_PASSWORD,
-    SMTP_PORT,
-    SMTP_SERVER,
-    SMTP_USERNAME,
+    GOOGLE_WEBHOOK_URL,
     log,
 )
 
-
 def send_email(subject: str, html: str, plain: str) -> None:
+    # Recipients ki list ko comma-separated string mein convert karein
     recipients = [r.strip() for r in EMAIL_TO.split(",") if r.strip()]
+    to_string = ", ".join(recipients)
 
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = subject
-    msg["From"]    = EMAIL_FROM
-    msg["To"]      = ", ".join(recipients)
-    msg.attach(MIMEText(plain, "plain"))
-    msg.attach(MIMEText(html,  "html"))
+    # Google Apps Script ke liye data prepare karein
+    payload = {
+        "to": to_string,
+        "subject": subject,
+        "html": html,
+        "plain": plain
+    }
 
     try:
-        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
-            server.ehlo()
-            server.starttls()
-            server.login(SMTP_USERNAME, SMTP_PASSWORD)
-            server.sendmail(EMAIL_FROM, recipients, msg.as_string())
-        log.info("Email sent to %d recipients: %s", len(recipients), ", ".join(recipients))
-    except smtplib.SMTPAuthenticationError as exc:
-        log.error("SMTP authentication failed: %s", exc)
-        raise
-    except smtplib.SMTPException as exc:
-        log.error("SMTP error: %s", exc)
-        raise
+        # Railway is HTTP POST request (port 443) ko allow karega
+        response = requests.post(GOOGLE_WEBHOOK_URL, json=payload)
+        
+        # Check if the script executed successfully
+        if response.status_code == 200:
+            log.info("Email sent via Webhook to %d recipients: %s", len(recipients), to_string)
+        else:
+            log.error("Webhook error. Status code: %s", response.status_code)
+            
     except Exception as exc:
         log.error("Unexpected email error: %s", exc)
         raise

@@ -3,6 +3,8 @@
 import logging
 import os
 import sys
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
 
@@ -31,6 +33,7 @@ SMTP_USERNAME = os.getenv("SMTP_USERNAME")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
 EMAIL_FROM    = os.getenv("EMAIL_FROM")
 EMAIL_TO      = os.getenv("EMAIL_TO")
+GOOGLE_WEBHOOK_URL = os.getenv("GOOGLE_WEBHOOK_URL")
 
 # ── Sector Definitions ─────────────────────────────────────────────────────────
 # Sectors are driven by the `category` column, NOT hardcoded commodity codes:
@@ -63,3 +66,27 @@ SECTOR_CONFIG = {
         "filter":     _cat_in(_ALL_CATS),
     },
 }
+
+# ── Auto sector resolution (single cron, two fire times) ───────────────────────
+# One Railway cron schedule ("5,35 18 * * 1-5" UTC) fires twice: 23:05 and 23:35
+# PKT — right after international close (11:00 PM) and local close (11:30 PM).
+# The script picks the sector from the current PKT time instead of needing two
+# separate services with different SECTOR env vars.
+PKT = ZoneInfo("Asia/Karachi")
+_AUTO_SCHEDULE = [
+    ("international", 23, 5),
+    ("local",         23, 35),
+]
+_AUTO_TOLERANCE_MIN = 20  # forgive scheduler jitter; outside this, fall back to "all"
+
+
+def resolve_auto_sector(now: datetime = None) -> str:
+    """Pick the sector whose scheduled fire-time is closest to `now` (PKT)."""
+    now = now or datetime.now(PKT)
+    now_min = now.hour * 60 + now.minute
+    best_sector, best_diff = "all", None
+    for sector, h, m in _AUTO_SCHEDULE:
+        diff = abs(now_min - (h * 60 + m))
+        if best_diff is None or diff < best_diff:
+            best_sector, best_diff = sector, diff
+    return best_sector if best_diff <= _AUTO_TOLERANCE_MIN else "all"

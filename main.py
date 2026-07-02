@@ -4,16 +4,18 @@ PMEX Market Summary Email
 Usage:
   python main.py --sector local          # Domestic physical agri   (close 11:30 PM PKT)
   python main.py --sector international  # International agri       (close 11:00 PM PKT)
-  python main.py                         # Both sectors combined
+  python main.py --sector all            # Both sectors combined
+  python main.py --sector auto           # Pick sector from current PKT time (see below)
 
-Sector also reads from the SECTOR env var (CLI flag wins if both given) so the
-same deployed service can be reused across multiple Railway cron schedules by
-only changing an env var, not code:
-  SECTOR=international python main.py
+Deployment model: ONE Railway service, ONE cron schedule that fires twice a day
+("5,35 18 * * 1-5" UTC = 23:05 and 23:35 PKT — right after international close
+at 11:00 PM and local close at 11:30 PM). SECTOR=auto (the default) makes the
+script look at the current PKT time and decide which sector's email to send,
+so no second service or second cron schedule is needed. A CLI --sector flag
+always overrides SECTOR for manual/test runs.
 
 Numbers (tables, counts, peak hours) are computed in code; the LLM only writes the
-prose summaries. Run each sector after its own market close so the last snapshot of
-the day is the true closing figure.
+prose summaries.
 """
 
 import argparse
@@ -21,7 +23,7 @@ import os
 import sys
 from datetime import datetime
 
-from config import SECTOR_CONFIG, log
+from config import SECTOR_CONFIG, log, resolve_auto_sector
 from db import get_connection
 from queries import collect_report_data
 from llm import build_prompt, get_summaries
@@ -33,9 +35,9 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Send PMEX market summary email.")
     parser.add_argument(
         "--sector",
-        choices=["local", "international", "all"],
-        default=os.getenv("SECTOR", "all"),
-        help="Which sector to report on (default: all, or $SECTOR env var)",
+        choices=["local", "international", "all", "auto"],
+        default=os.getenv("SECTOR", "auto"),
+        help="Which sector to report on (default: auto, or $SECTOR env var)",
     )
     parser.add_argument(
         "--dry-run",
@@ -48,8 +50,13 @@ def parse_args():
 def main():
     args   = parse_args()
     sector = args.sector
-    cfg    = SECTOR_CONFIG[sector]
-    today  = datetime.now().strftime("%Y-%m-%d")
+
+    if sector == "auto":
+        sector = resolve_auto_sector()
+        log.info("SECTOR=auto resolved to '%s' based on current PKT time.", sector)
+
+    cfg   = SECTOR_CONFIG[sector]
+    today = datetime.now().strftime("%Y-%m-%d")
 
     log.info("=== PMEX Email Summary | sector=%s | date=%s ===", sector, today)
 
