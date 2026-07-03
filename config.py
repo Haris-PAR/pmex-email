@@ -77,16 +77,20 @@ _AUTO_SCHEDULE = [
     ("international", 23, 5),
     ("local",         23, 35),
 ]
-_AUTO_TOLERANCE_MIN = 20  # forgive scheduler jitter; outside this, fall back to "all"
-
 
 def resolve_auto_sector(now: datetime = None) -> str:
-    """Pick the sector whose scheduled fire-time is closest to `now` (PKT)."""
+    """Pick the sector whose scheduled fire-time is closest to `now` (PKT).
+
+    No tolerance cutoff: Railway's cron can fire late (queueing, cold start),
+    but the only thing that ever invokes this script on a schedule is that
+    cron, so the nearest anchor time is always the right call.
+    """
     now = now or datetime.now(PKT)
     now_min = now.hour * 60 + now.minute
-    best_sector, best_diff = "all", None
+    best_sector, best_diff = None, None
     for sector, h, m in _AUTO_SCHEDULE:
         diff = abs(now_min - (h * 60 + m))
+        diff = min(diff, 1440 - diff)  # circular distance, handles midnight wraparound
         if best_diff is None or diff < best_diff:
             best_sector, best_diff = sector, diff
-    return best_sector if best_diff <= _AUTO_TOLERANCE_MIN else "all"
+    return best_sector
