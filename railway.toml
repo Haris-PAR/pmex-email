@@ -4,10 +4,10 @@ builder = "NIXPACKS"
 [deploy]
 startCommand = "python main.py"
 # Fires twice a day, Mon-Fri, in UTC:
-#   18:05 UTC = 23:05 PKT -> right after international close (11:00 PM PKT)
-#   18:35 UTC = 23:35 PKT -> right after local close (11:30 PM PKT)
+#   18:00 UTC = 23:00 PKT -> right after local close (11:00 PM PKT)
+#   18:45 UTC = 23:45 PKT -> right after international close (11:45 PM PKT)
 # main.py defaults to --sector auto, which looks at the current PKT time and
 # picks "international" or "local" accordingly — no second service needed.
-cronSchedule = "5,35 18 * * 1-5"
+cronSchedule = "0,45 18 * * 1-5"
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 3

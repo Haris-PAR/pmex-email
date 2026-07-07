@@ -54,17 +54,36 @@ def build_html(data: dict, summaries: dict, sector_label: str, today: str, sende
 
     return f"""<!DOCTYPE html>
 <html lang="en">
-<head><meta charset="UTF-8"></head>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  body, table, td, div, p {{ -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }}
+  @media only screen and (max-width: 600px) {{
+    .pmex-container {{ margin: 0 !important; border-radius: 0 !important; width: 100% !important; }}
+    .pmex-pad {{ padding-left: 16px !important; padding-right: 16px !important; }}
+    .pmex-header {{ padding-left: 16px !important; padding-right: 16px !important; }}
+    .pmex-footer {{ padding-left: 16px !important; padding-right: 16px !important; }}
+    .pmex-header h1 {{ font-size: 18px !important; }}
+    .pmex-card {{ width: 48% !important; margin: 0 1% 8px !important; }}
+    .pmex-table-scroll {{ display: none !important; }}
+    .pmex-mobile-rows {{ display: block !important; }}
+  }}
+  @media only screen and (max-width: 360px) {{
+    .pmex-card {{ width: 98% !important; margin: 0 1% 8px !important; }}
+  }}
+</style>
+</head>
 <body style="margin:0; padding:0; background:#f0f4f8; font-family:Arial,sans-serif;">
-<div style="max-width:640px; margin:28px auto; background:#fff; border-radius:10px; box-shadow:0 3px 12px rgba(0,0,0,.12); overflow:hidden;">
-  <div style="background:#154360; padding:24px 28px;">
+<div class="pmex-container" style="max-width:640px; margin:28px auto; background:#fff; border-radius:10px; box-shadow:0 3px 12px rgba(0,0,0,.12); overflow:hidden;">
+  <div class="pmex-header" style="background:#154360; padding:24px 28px;">
     <h1 style="color:#fff; margin:0; font-size:21px; letter-spacing:.4px;">PMEX Market Summary</h1>
     <p style="color:#85c1e9; margin:5px 0 0; font-size:13px;">{sector_label} &nbsp;&bull;&nbsp; {today}</p>
   </div>
-  <div style="padding:20px 28px;">
+  <div class="pmex-pad" style="padding:20px 28px;">
     {content}
   </div>
-  <div style="background:#eaf4fb; padding:16px 28px; border-top:1px solid #d6eaf8;">
+  <div class="pmex-footer" style="background:#eaf4fb; padding:16px 28px; border-top:1px solid #d6eaf8;">
     <p style="margin:0; font-size:13px; color:#555;">Best regards,</p>
     <p style="margin:0; font-weight:bold; color:#154360; font-size:14px;">{sender_name}</p>
     <p style="margin:6px 0 0; font-size:11px; color:#999;">Automated report — Pakistan Mercantile Exchange live market data. Figures computed from end-of-session snapshots.</p>
@@ -76,7 +95,11 @@ def build_html(data: dict, summaries: dict, sector_label: str, today: str, sende
 
 def build_plain(data: dict, summaries: dict, sector_label: str, today: str, sender_name: str) -> str:
     d, w, m = data["daily"], data["weekly"], data["monthly"]
-    ov = lambda o: f"Active contracts: {o.get('active_contracts')} | Contracts traded: {o.get('contracts_traded')} | Avg change: {o.get('avg_change_pct') or 0:+.2f}%"
+    ov = lambda o: (
+        f"Active contracts: {o.get('active_contracts')} | Contracts traded: {o.get('contracts_traded')} | "
+        f"Turnover value: {o.get('turnover_value') or 0:,.0f} {o.get('currency', '')}".strip()
+        + f" | Avg change: {o.get('avg_change_pct') or 0:+.2f}%"
+    )
 
     return f"""PMEX MARKET SUMMARY — {sector_label} — {today}
 

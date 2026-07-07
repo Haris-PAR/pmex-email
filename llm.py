@@ -17,16 +17,25 @@ _SECTIONS = ("DAILY", "WEEKLY", "MONTHLY")
 
 def build_prompt(data: dict, today: str, sector_label: str) -> str:
     d, w, m = data["daily"], data["weekly"], data["monthly"]
+    ov_line = lambda ov: (
+        f"Active contracts: {ov.get('active_contracts')} | Contracts traded: {ov.get('contracts_traded')} | "
+        f"Turnover value: {ov.get('turnover_value') or 0:,.0f} {ov.get('currency', '')}".strip()
+    )
     return f"""You are a commodity market analyst for PMEX (Pakistan Mercantile Exchange).
 Today is {today}. Sector: {sector_label}.
 
-Below are pre-computed, ACCURATE market tables. Write THREE short prose summaries —
-one for each period. Do NOT output tables or restate every row; interpret the data:
-call out the most active commodities, notable price moves, and overall direction.
+Below are pre-computed, ACCURATE market tables, now including each commodity/contract's
+Avg Price and Turnover Value (turnover value = avg price * contracts traded — the total
+value traded, and the key figure to discuss alongside price moves). Write THREE short
+prose summaries — one for each period. Do NOT output tables or restate every row;
+interpret the data: call out the most active commodities, notable price levels or moves,
+which commodity/contract had the most turnover value, and overall direction.
 
 Rules:
 - 2-3 sentences per section. Plain analytical prose. No markdown headings, no bullet lists.
 - "Contracts" = number of contracts (lots) traded. "Volume" = converted physical quantity.
+  "Avg Price" and "Turnover Value" always carry a unit/currency — never state either as a
+  bare, unitless number.
 - Refer to commodities by name; bold nothing.
 - Output EXACTLY this format, nothing else:
 ===DAILY===
@@ -37,18 +46,18 @@ Rules:
 <monthly summary>
 
 ============ DAILY ({today}) ============
-Active contracts: {d['overview'].get('active_contracts')} | Contracts traded: {d['overview'].get('contracts_traded')} | Peak hours: {peak_str(d['peak_hours'])}
+{ov_line(d['overview'])} | Peak hours: {peak_str(d['peak_hours'])}
 {commodities_text(d['commodities'])}
 
 ============ WEEKLY (last 7 days) ============
-Active contracts: {w['overview'].get('active_contracts')} | Contracts traded: {w['overview'].get('contracts_traded')}
+{ov_line(w['overview'])}
 By commodity:
 {commodities_text(w['commodities'])}
 Top contracts:
 {contracts_text(w['top_contracts'])}
 
 ============ MONTHLY (last 30 days) ============
-Active contracts: {m['overview'].get('active_contracts')} | Contracts traded: {m['overview'].get('contracts_traded')}
+{ov_line(m['overview'])}
 {commodities_text(m['commodities'])}
 
 Write the three summaries now:"""

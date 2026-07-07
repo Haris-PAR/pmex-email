@@ -29,6 +29,34 @@ def _daily_last(sf: str, date_clause: str) -> str:
     """
 
 
+def _day_calc(sf: str, date_clause: str) -> str:
+    """CTE body: per (contract, day) price/turnover, joined onto the day's last snapshot.
+
+    avg_price = AVG(close_price) across the day's ACTIVE snapshots (mirrors
+    report_summary.py, so a single quote spike doesn't skew it); contracts_traded/
+    volume/change_pct still come from the day's LAST snapshot since total_volume/
+    commodity_volume are cumulative intraday. turnover_value = avg_price *
+    contracts_traded, same definition as report_summary.py's range report.
+    """
+    return f"""
+        SELECT
+            da.contract, da.commodity_code, da.commodity_name, da.size_unit, da.price_unit,
+            da.fetch_date, da.avg_price, dl.change_pct, dl.bid, dl.ask,
+            COALESCE(dl.total_volume, 0)     AS contracts_traded,
+            COALESCE(dl.commodity_volume, 0) AS volume,
+            da.avg_price * COALESCE(dl.total_volume, 0) AS turnover_value
+        FROM (
+            SELECT contract, commodity_code, commodity_name, size_unit, price_unit, fetch_date,
+                   AVG(close_price) AS avg_price
+            FROM crop_snapshots
+            WHERE {date_clause} AND {sf} AND {ACTIVE}
+            GROUP BY contract, commodity_code, commodity_name, size_unit, price_unit, fetch_date
+        ) da
+        JOIN ({_daily_last(sf, date_clause)}) dl
+          ON dl.contract = da.contract AND dl.fetch_date = da.fetch_date
+    """
+
+
 def _rows(conn, sql: str, label: str) -> list[dict]:
     try:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
@@ -45,17 +73,23 @@ def _rows(conn, sql: str, label: str) -> list[dict]:
 # ── Per-commodity aggregates ────────────────────────────────────────────────────
 def _commodities(conn, sf: str, date_clause: str, label: str) -> list[dict]:
     sql = f"""
-        WITH daily_last AS ({_daily_last(sf, date_clause)})
+        WITH day_calc AS ({_day_calc(sf, date_clause)})
         SELECT
             commodity_code,
             commodity_name,
             size_unit,
             COUNT(DISTINCT contract)     AS n_contracts,
-            SUM(total_volume)            AS contracts_traded,
-            SUM(commodity_volume)        AS converted_volume,
+            SUM(contracts_traded)        AS contracts_traded,
+            SUM(volume)                  AS converted_volume,
             AVG(change_pct)              AS avg_change_pct,
+            SUM(turnover_value)          AS turnover_value,
+            CASE WHEN SUM(contracts_traded) > 0
+                 THEN SUM(turnover_value) / SUM(contracts_traded) ELSE 0 END AS avg_price,
+            -- Only a single blended avg price/currency when every contract under this
+            -- commodity quotes on the same basis (mirrors report_summary.py's grand_totals).
+            CASE WHEN COUNT(DISTINCT price_unit) = 1 THEN MIN(price_unit) ELSE NULL END AS price_unit,
             COUNT(DISTINCT fetch_date)   AS days_traded
-        FROM daily_last
+        FROM day_calc
         WHERE {ACTIVE}
         GROUP BY commodity_code, commodity_name, size_unit
         ORDER BY converted_volume DESC NULLS LAST;
@@ -65,15 +99,19 @@ def _commodities(conn, sf: str, date_clause: str, label: str) -> list[dict]:
 
 def _top_contracts(conn, sf: str, date_clause: str, label: str, limit: int = 10) -> list[dict]:
     sql = f"""
-        WITH daily_last AS ({_daily_last(sf, date_clause)})
+        WITH day_calc AS ({_day_calc(sf, date_clause)})
         SELECT
             contract,
             commodity_name,
             size_unit,
-            SUM(total_volume)     AS contracts_traded,
-            SUM(commodity_volume) AS converted_volume,
-            AVG(change_pct)       AS avg_change_pct
-        FROM daily_last
+            SUM(contracts_traded)   AS contracts_traded,
+            SUM(volume)             AS converted_volume,
+            AVG(change_pct)         AS avg_change_pct,
+            SUM(turnover_value)     AS turnover_value,
+            CASE WHEN SUM(contracts_traded) > 0
+                 THEN SUM(turnover_value) / SUM(contracts_traded) ELSE 0 END AS avg_price,
+            CASE WHEN COUNT(DISTINCT price_unit) = 1 THEN MIN(price_unit) ELSE NULL END AS price_unit
+        FROM day_calc
         WHERE {ACTIVE}
         GROUP BY contract, commodity_name, size_unit
         ORDER BY converted_volume DESC NULLS LAST
@@ -84,14 +122,23 @@ def _top_contracts(conn, sf: str, date_clause: str, label: str, limit: int = 10)
 
 def _overview(conn, sf: str, date_clause: str, label: str) -> dict:
     sql = f"""
-        WITH daily_last AS ({_daily_last(sf, date_clause)})
+        WITH day_calc AS ({_day_calc(sf, date_clause)})
         SELECT
             COUNT(DISTINCT contract) FILTER (WHERE {ACTIVE})       AS active_contracts,
             COUNT(DISTINCT commodity_code) FILTER (WHERE {ACTIVE}) AS commodities,
-            SUM(total_volume)                                      AS contracts_traded,
-            SUM(commodity_volume)                                  AS converted_volume,
-            AVG(change_pct)                                        AS avg_change_pct
-        FROM daily_last;
+            SUM(contracts_traded)                                  AS contracts_traded,
+            SUM(volume)                                             AS converted_volume,
+            AVG(change_pct)                                         AS avg_change_pct,
+            SUM(turnover_value)                                     AS turnover_value,
+            CASE WHEN SUM(contracts_traded) > 0
+                 THEN SUM(turnover_value) / SUM(contracts_traded) ELSE 0 END AS avg_price,
+            CASE WHEN COUNT(DISTINCT price_unit) = 1 THEN MIN(price_unit) ELSE NULL END AS avg_price_unit,
+            -- Currency alone (e.g. "Rs") is uniform far more often than the full price_unit
+            -- string, so turnover value can usually show a currency even when avg_price can't.
+            CASE WHEN COUNT(DISTINCT rtrim(split_part(price_unit, ' ', 1), '.')) FILTER (WHERE price_unit IS NOT NULL) = 1
+                 THEN MIN(rtrim(split_part(price_unit, ' ', 1), '.'))
+                 ELSE '' END AS currency
+        FROM day_calc;
     """
     rows = _rows(conn, sql, label)
     return rows[0] if rows else {}

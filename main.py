@@ -2,14 +2,14 @@
 PMEX Market Summary Email
 
 Usage:
-  python main.py --sector local          # Domestic physical agri   (close 11:30 PM PKT)
-  python main.py --sector international  # International agri       (close 11:00 PM PKT)
+  python main.py --sector local          # Domestic physical agri   (close 11:00 PM PKT)
+  python main.py --sector international  # International agri       (close 11:45 PM PKT)
   python main.py --sector all            # Both sectors combined
   python main.py --sector auto           # Pick sector from current PKT time (see below)
 
 Deployment model: ONE Railway service, ONE cron schedule that fires twice a day
-("5,35 18 * * 1-5" UTC = 23:05 and 23:35 PKT — right after international close
-at 11:00 PM and local close at 11:30 PM). SECTOR=auto (the default) makes the
+("0,45 18 * * 1-5" UTC = 23:00 and 23:45 PKT — right after local close
+at 11:00 PM and international close at 11:45 PM). SECTOR=auto (the default) makes the
 script look at the current PKT time and decide which sector's email to send,
 so no second service or second cron schedule is needed. A CLI --sector flag
 always overrides SECTOR for manual/test runs.

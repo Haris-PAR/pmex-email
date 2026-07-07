@@ -29,7 +29,8 @@ def send_email(subject: str, html: str, plain: str) -> None:
             log.info("Email sent via Webhook to %d recipients: %s", len(recipients), to_string)
         else:
             log.error("Webhook error. Status code: %s", response.status_code)
-            
+            raise RuntimeError(f"Webhook returned status {response.status_code}")
+
     except Exception as exc:
         log.error("Unexpected email error: %s", exc)
         raise

@@ -52,12 +52,12 @@ def _cat_in(cats):
 SECTOR_CONFIG = {
     "local": {
         "label":      "Local Agriculture (Domestic Physical)",
-        "close_time": "11:30 PM PKT",
+        "close_time": "11:00 PM PKT",
         "filter":     _cat_in(_LOCAL_CATS),
     },
     "international": {
         "label":      "International Agriculture",
-        "close_time": "11:00 PM PKT",
+        "close_time": "11:45 PM PKT",
         "filter":     _cat_in(_INTL_CATS),
     },
     "all": {
@@ -68,14 +68,14 @@ SECTOR_CONFIG = {
 }
 
 # ── Auto sector resolution (single cron, two fire times) ───────────────────────
-# One Railway cron schedule ("5,35 18 * * 1-5" UTC) fires twice: 23:05 and 23:35
-# PKT — right after international close (11:00 PM) and local close (11:30 PM).
+# One Railway cron schedule ("0,45 18 * * 1-5" UTC) fires twice: 23:00 and 23:45
+# PKT — right after local close (11:00 PM) and international close (11:45 PM).
 # The script picks the sector from the current PKT time instead of needing two
 # separate services with different SECTOR env vars.
 PKT = ZoneInfo("Asia/Karachi")
 _AUTO_SCHEDULE = [
-    ("international", 23, 5),
-    ("local",         23, 35),
+    ("local",         23, 0),
+    ("international", 23, 45),
 ]
 
 def resolve_auto_sector(now: datetime = None) -> str:
